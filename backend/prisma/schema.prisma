@@ -1,0 +1,286 @@
+// sigeca_v2/backend/prisma/schema.prisma
+// Generado para SIGECA v2 — Sistema de Gestión de Carga Académica
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// NOTA: En Prisma v7+ la URL se define en prisma.config.ts, no aquí.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// PERIODO ESCOLAR
+// Representa un semestre o ciclo escolar.
+// Todas las asignaciones pertenecen a un periodo.
+// ─────────────────────────────────────────────
+model PeriodoEscolar {
+  id          Int      @id @default(autoincrement())
+  nombre      String   // Ej: "2025-A", "Enero-Junio 2025"
+  fechaInicio DateTime
+  fechaFin    DateTime
+  activo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  grupos        Grupo[]
+  asignaciones  Asignacion[]
+  disponibilidades DisponibilidadProfesor[]
+
+  @@map("periodos_escolares")
+}
+
+// ─────────────────────────────────────────────
+// PROFESOR
+// ─────────────────────────────────────────────
+model Profesor {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  telefono  String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Materias que el profesor puede impartir
+  materias      MateriaProfesor[]
+  // Disponibilidad horaria por periodo
+  disponibilidades DisponibilidadProfesor[]
+  // Asignaciones generadas
+  asignaciones  Asignacion[]
+  
+  usuario   Usuario?
+
+  @@map("profesores")
+}
+
+// ─────────────────────────────────────────────
+// MATERIA
+// ─────────────────────────────────────────────
+model Materia {
+  id             Int      @id @default(autoincrement())
+  nombre         String
+  clave          String   @unique  // Ej: "MAT101"
+  horasSemanales Int                // Total de horas clase por semana
+  creditos       Int
+  carrera        String             // Ej: "ISC", "ICI", "LAE"
+  semestre       Int                // Semestre al que pertenece la materia
+  activa         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Profesores habilitados para impartirla
+  profesores   MateriaProfesor[]
+  // Grupos que la cursan
+  grupos       MateriaGrupo[]
+  // Asignaciones en el horario
+  asignaciones Asignacion[]
+
+  @@map("materias")
+}
+
+// ─────────────────────────────────────────────
+// MATERIA <-> PROFESOR  (relación muchos a muchos)
+// Define qué profesor está habilitado para impartir qué materia.
+// Es la base del filtrado al generar horarios.
+// ─────────────────────────────────────────────
+model MateriaProfesor {
+  id         Int      @id @default(autoincrement())
+  profesorId Int
+  materiaId  Int
+  createdAt  DateTime @default(now())
+
+  profesor Profesor @relation(fields: [profesorId], references: [id], onDelete: Cascade)
+  materia  Materia  @relation(fields: [materiaId], references: [id], onDelete: Cascade)
+
+  @@unique([profesorId, materiaId])
+  @@map("materias_profesores")
+}
+
+// ─────────────────────────────────────────────
+// GRUPO
+// Un grupo es un conjunto de alumnos que cursan juntos.
+// Pertenece a un periodo escolar.
+// ─────────────────────────────────────────────
+model Grupo {
+  id        Int      @id @default(autoincrement())
+  nombre    String   // Ej: "ISC-3A", "ISC-3B"
+  semestre  Int
+  carrera   String
+  cupo      Int      @default(30)
+  periodoId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  periodo      PeriodoEscolar @relation(fields: [periodoId], references: [id])
+  // Materias que el grupo debe cursar en este periodo
+  materias     MateriaGrupo[]
+  // Asignaciones de horario
+  asignaciones Asignacion[]
+
+  @@unique([nombre, periodoId])
+  @@map("grupos")
+}
+
+// ─────────────────────────────────────────────
+// MATERIA <-> GRUPO  (relación muchos a muchos)
+// Indica qué materias debe cursar cada grupo en el periodo.
+// ─────────────────────────────────────────────
+model MateriaGrupo {
+  id        Int      @id @default(autoincrement())
+  materiaId Int
+  grupoId   Int
+  createdAt DateTime @default(now())
+
+  materia Materia @relation(fields: [materiaId], references: [id], onDelete: Cascade)
+  grupo   Grupo   @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+
+  @@unique([materiaId, grupoId])
+  @@map("materias_grupos")
+}
+
+// ─────────────────────────────────────────────
+// SALON
+// Aula física o virtual disponible para impartir clases.
+// ─────────────────────────────────────────────
+model Salon {
+  id          Int      @id @default(autoincrement())
+  nombre      String   // Ej: "A-101"
+  edificio    String?
+  capacidad   Int
+  tipo        TipoSalon @default(AULA)
+  disponible  Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  asignaciones Asignacion[]
+
+  @@unique([nombre, edificio])
+  @@map("salones")
+}
+
+enum TipoSalon {
+  AULA
+  LABORATORIO
+  SALA_COMPUTO
+  AUDITORIO
+  TALLER
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE HORARIO
+// Representa una franja de tiempo en un día de la semana.
+// Ej: Lunes 07:00-08:00, Martes 08:00-09:00
+// ─────────────────────────────────────────────
+model BloqueHorario {
+  id           Int      @id @default(autoincrement())
+  diaSemana    DiaSemana
+  horaInicio   String   // Formato "HH:mm", ej: "07:00"
+  horaFin      String   // Formato "HH:mm", ej: "08:00"
+  duracionMin  Int      @default(60)
+
+  disponibilidades DisponibilidadProfesor[]
+  asignaciones     Asignacion[]
+
+  @@unique([diaSemana, horaInicio])
+  @@map("bloques_horarios")
+}
+
+enum DiaSemana {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+}
+
+// ─────────────────────────────────────────────
+// DISPONIBILIDAD PROFESOR
+// Indica en qué bloques horarios un profesor está disponible
+// para ser asignado, dentro de un periodo escolar.
+// ─────────────────────────────────────────────
+model DisponibilidadProfesor {
+  id         Int      @id @default(autoincrement())
+  profesorId Int
+  bloqueId   Int
+  periodoId  Int
+  disponible Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  profesor Profesor       @relation(fields: [profesorId], references: [id], onDelete: Cascade)
+  bloque   BloqueHorario  @relation(fields: [bloqueId], references: [id], onDelete: Cascade)
+  periodo  PeriodoEscolar @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+
+  @@unique([profesorId, bloqueId, periodoId])
+  @@map("disponibilidades_profesores")
+}
+
+// ─────────────────────────────────────────────
+// ASIGNACION
+// Núcleo del sistema: representa una clase programada.
+// Conecta: profesor + materia + grupo + salón + bloque horario.
+//
+// RESTRICCIONES IMPLÍCITAS (a validar en el motor de scheduling):
+//   1. Un profesor no puede estar en dos asignaciones con el mismo
+//      bloque horario en el mismo periodo.
+//   2. Un salón no puede tener dos asignaciones en el mismo bloque.
+//   3. Un grupo no puede tener dos materias en el mismo bloque.
+//   4. El profesor debe tener disponibilidad en ese bloque/periodo.
+// ─────────────────────────────────────────────
+model Asignacion {
+  id         Int              @id @default(autoincrement())
+  profesorId Int
+  materiaId  Int
+  grupoId    Int
+  salonId    Int
+  bloqueId   Int
+  periodoId  Int
+  estado     EstadoAsignacion @default(PROPUESTA)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  profesor Profesor       @relation(fields: [profesorId], references: [id])
+  materia  Materia        @relation(fields: [materiaId], references: [id])
+  grupo    Grupo          @relation(fields: [grupoId], references: [id])
+  salon    Salon          @relation(fields: [salonId], references: [id])
+  bloque   BloqueHorario  @relation(fields: [bloqueId], references: [id])
+  periodo  PeriodoEscolar @relation(fields: [periodoId], references: [id])
+
+  // Garantiza que no existan dos asignaciones idénticas
+  @@unique([profesorId, bloqueId, periodoId])  // Anti-traslape: profesor
+  @@unique([salonId, bloqueId, periodoId])     // Anti-traslape: salón
+  @@unique([grupoId, bloqueId, periodoId])     // Anti-traslape: grupo
+
+  @@map("asignaciones")
+}
+
+enum EstadoAsignacion {
+  PROPUESTA    // Generada por el algoritmo, sin confirmar
+  CONFIRMADA   // Aprobada por el administrador
+  CANCELADA    // Descartada
+}
+
+enum RolUsuario {
+  ADMIN
+  COORDINADOR
+  PROFESOR
+}
+
+model Usuario {
+  id        Int        @id @default(autoincrement())
+  nombre    String
+  email     String     @unique
+  password  String
+  rol       RolUsuario @default(COORDINADOR)
+  activo    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Si el usuario es un profesor, se vincula a su registro
+  profesorId Int?      @unique
+  profesor   Profesor? @relation(fields: [profesorId], references: [id])
+
+  @@map("usuarios")
+}
