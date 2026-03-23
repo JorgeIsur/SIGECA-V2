@@ -14,14 +14,14 @@ La generación de horarios académicos es un problema clásico de optimización 
 
 ## Estado del proyecto
 
-> En desarrollo activo — Fase 3: Panel administrativo (frontend)
+> En desarrollo activo — Fase 4: Motor de generación de horarios
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
 | 1 | Autenticación y usuarios con JWT | ✅ Completa |
 | 2 | CRUDs de entidades académicas | ✅ Completa |
-| 3 | Panel administrativo (frontend) | 🔄 En progreso |
-| 4 | Motor de generación de horarios | ⏳ Pendiente |
+| 3 | Panel administrativo (frontend) | ✅ Completa |
+| 4 | Motor de generación de horarios | 🔄 En progreso |
 | 5 | Vistas por rol | ⏳ Pendiente |
 
 ---
@@ -32,8 +32,8 @@ La generación de horarios académicos es un problema clásico de optimización 
 - Gestión de profesores, materias, grupos, salones y periodos escolares
 - Definición de disponibilidad horaria por profesor (individual y masiva)
 - Asignación de materias a profesores y grupos
-- Generación automática de horarios sin traslapes *(próximamente)*
-- Panel administrativo web *(en desarrollo)*
+- Panel administrativo web con sidebar por rol
+- Generación automática de horarios sin traslapes *(en desarrollo)*
 
 ---
 
@@ -45,8 +45,8 @@ La generación de horarios académicos es un problema clásico de optimización 
 - Prisma ORM v7
 - PostgreSQL
 
-**Frontend** *(en desarrollo)*
-- Next.js
+**Frontend**
+- Next.js 16
 - React
 - Tailwind CSS
 
@@ -78,38 +78,71 @@ La generación de horarios académicos es un problema clásico de optimización 
 
 ## Instalación
 
+### Backend
+
 ```bash
-# Clonar el repositorio
 git clone https://github.com/JorgeIsur/SIGECA-V2.git
 cd SIGECA-V2/backend
 
-# Instalar dependencias
 npm install
 
-# Configurar variables de entorno
 cp .env.example .env
 # Edita .env con tus credenciales de PostgreSQL y JWT_SECRET
 
-# Generar el cliente de Prisma
 npx prisma generate
-
-# Correr migraciones
 npx prisma migrate deploy
 
-# Iniciar en modo desarrollo
 npm run start:dev
+# Corre en http://localhost:3001
+```
+
+### Frontend
+
+```bash
+cd SIGECA-V2/frontend
+
+npm install
+
+# Crea el archivo de entorno
+echo "NEXT_PUBLIC_API_URL=http://localhost:3001" > .env.local
+
+npm run dev
+# Corre en http://localhost:3000
 ```
 
 ---
 
 ## Variables de entorno
 
-Crea un archivo `.env` en `backend/` con las siguientes variables:
-
+**`backend/.env`**
 ```env
 DATABASE_URL="postgresql://usuario:password@localhost:5432/sigeca"
 JWT_SECRET="tu_secreto_seguro"
 ```
+
+**`frontend/.env.local`**
+```env
+NEXT_PUBLIC_API_URL="http://localhost:3001"
+```
+
+---
+
+## Panel administrativo
+
+El frontend incluye las siguientes páginas:
+
+| Ruta | Descripción | Roles |
+|------|-------------|-------|
+| `/login` | Inicio de sesión | Todos |
+| `/dashboard` | Pantalla de bienvenida | Todos |
+| `/profesores` | CRUD de profesores | ADMIN, COORDINADOR |
+| `/materias` | CRUD de materias | ADMIN, COORDINADOR |
+| `/salones` | CRUD de salones | ADMIN, COORDINADOR |
+| `/grupos` | CRUD de grupos | ADMIN, COORDINADOR |
+| `/periodos` | CRUD de periodos escolares | ADMIN, COORDINADOR |
+| `/bloques` | CRUD de bloques horarios | ADMIN |
+| `/disponibilidad` | Gestión de disponibilidad por profesor | ADMIN, COORDINADOR |
+| `/usuarios` | CRUD de usuarios | ADMIN |
 
 ---
 
@@ -213,6 +246,7 @@ Authorization: Bearer <token>
 | Gestionar usuarios | ✅ | ❌ | ❌ |
 | Crear/editar entidades | ✅ | ❌ | ❌ |
 | Consultar entidades | ✅ | ✅ | ❌ |
+| Gestionar disponibilidad | ✅ | ✅ | ❌ |
 | Ver propio horario | ✅ | ✅ | ✅ |
 
 ---
@@ -238,8 +272,33 @@ SIGECA-V2/
 │   │   ├── disponibilidad/
 │   │   └── app.module.ts
 │   └── package.json
-├── frontend/          # En desarrollo
-├── docs/              # En desarrollo
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (auth)/login/
+│   │   │   ├── (dashboard)/
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── dashboard/
+│   │   │   │   ├── profesores/
+│   │   │   │   ├── materias/
+│   │   │   │   ├── salones/
+│   │   │   │   ├── grupos/
+│   │   │   │   ├── periodos/
+│   │   │   │   ├── bloques/
+│   │   │   │   ├── disponibilidad/
+│   │   │   │   └── usuarios/
+│   │   │   └── layout.tsx
+│   │   ├── components/
+│   │   │   ├── layout/Sidebar.tsx
+│   │   │   └── ui/
+│   │   │       ├── Tabla.tsx
+│   │   │       └── Modal.tsx
+│   │   ├── context/AuthContext.tsx
+│   │   └── lib/
+│   │       ├── axios.ts
+│   │       └── types.ts
+│   └── package.json
+├── docs/
 └── .gitignore
 ```
 
