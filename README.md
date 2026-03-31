@@ -8,21 +8,21 @@ SIGECA es un sistema web para universidades que automatiza la generación de hor
 
 ## Motivación
 
-La generación de horarios académicos es un problema clásico de optimización con restricciones múltiples (University Timetabling Problem). En muchas instituciones este proceso se hace manualmente, lo que genera errores, traslapes y un alto costo administrativo. SIGECA v2 busca resolver esto con un motor de scheduling automatizado y un panel de administración completo.
+La generación de horarios académicos es un problema clásico de optimización con restricciones múltiples (University Timetabling Problem). En muchas instituciones este proceso se hace manualmente, lo que genera errores, traslapes y un alto costo administrativo. SIGECA v2 resuelve esto con un motor de scheduling automatizado y un panel de administración completo.
 
 ---
 
 ## Estado del proyecto
 
-> En desarrollo activo — Fase 4: Motor de generación de horarios
+> En desarrollo activo — Fase 5: Vistas por rol
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
 | 1 | Autenticación y usuarios con JWT | ✅ Completa |
 | 2 | CRUDs de entidades académicas | ✅ Completa |
 | 3 | Panel administrativo (frontend) | ✅ Completa |
-| 4 | Motor de generación de horarios | 🔄 En progreso |
-| 5 | Vistas por rol | ⏳ Pendiente |
+| 4 | Motor de generación de horarios | ✅ Completa |
+| 5 | Vistas por rol | 🔄 En progreso |
 
 ---
 
@@ -30,10 +30,61 @@ La generación de horarios académicos es un problema clásico de optimización 
 
 - Autenticación con JWT y tres niveles de acceso: **Administrador**, **Coordinador** y **Profesor**
 - Gestión de profesores, materias, grupos, salones y periodos escolares
-- Definición de disponibilidad horaria por profesor (individual y masiva)
+- Definición de disponibilidad horaria por profesor
 - Asignación de materias a profesores y grupos
 - Panel administrativo web con sidebar por rol
-- Generación automática de horarios sin traslapes *(en desarrollo)*
+- **Generación automática de horarios sin traslapes** mediante backtracking con forward checking
+
+---
+
+## Motor de generación de horarios
+
+El algoritmo implementado es **backtracking con forward checking**, un método clásico para problemas de satisfacción de restricciones (CSP).
+
+### Flujo del algoritmo
+
+```
+1. Cargar datos del periodo
+   └── grupos, materias, salones, bloques horarios, disponibilidades
+
+2. Construir lista de pendientes
+   └── una entrada por cada hora semanal de cada combinación grupo-materia
+
+3. Para cada pendiente (backtracking recursivo):
+   a. Iterar cada bloque horario disponible
+   b. Iterar cada profesor habilitado para esa materia
+      └── verificar que el profesor tenga disponibilidad en ese bloque
+      └── verificar que el profesor no esté ocupado en ese bloque
+   c. Iterar cada salón disponible
+      └── verificar que el salón no esté ocupado en ese bloque
+   d. Si se encontró combinación válida → registrar y avanzar al siguiente
+   e. Si no hay combinación válida → retroceder (backtrack) y probar otra
+
+4. Si se asignaron todos los pendientes → guardar en base de datos
+5. Si no fue posible → reportar error con sugerencias
+```
+<img src="docs/scheduling_backtracking_flow.svg" width="800" height="600" alt="Alt text"/>
+
+### Restricciones garantizadas
+
+El sistema garantiza que ninguna asignación generada viole estas tres reglas:
+
+- Un **profesor** no puede estar en dos clases simultáneas
+- Un **salón** no puede tener dos clases simultáneas
+- Un **grupo** no puede tener dos materias simultáneas
+
+Estas restricciones están reforzadas tanto en el algoritmo como en la base de datos mediante índices únicos compuestos en la tabla `asignaciones`.
+
+### Prerequisitos para generar un horario válido
+
+Para que el motor pueda generar un horario, el administrador debe haber configurado previamente:
+
+1. Un **periodo escolar** activo
+2. **Bloques horarios** (franjas de tiempo por día)
+3. **Profesores** con disponibilidad marcada en esos bloques
+4. **Materias** con al menos un profesor habilitado
+5. **Grupos** con materias asignadas
+6. Al menos un **salón** disponible
 
 ---
 
@@ -103,7 +154,6 @@ cd SIGECA-V2/frontend
 
 npm install
 
-# Crea el archivo de entorno
 echo "NEXT_PUBLIC_API_URL=http://localhost:3001" > .env.local
 
 npm run dev
@@ -129,20 +179,19 @@ NEXT_PUBLIC_API_URL="http://localhost:3001"
 
 ## Panel administrativo
 
-El frontend incluye las siguientes páginas:
-
 | Ruta | Descripción | Roles |
 |------|-------------|-------|
 | `/login` | Inicio de sesión | Todos |
 | `/dashboard` | Pantalla de bienvenida | Todos |
 | `/profesores` | CRUD de profesores | ADMIN, COORDINADOR |
-| `/materias` | CRUD de materias | ADMIN, COORDINADOR |
+| `/materias` | CRUD de materias + asignar profesores | ADMIN, COORDINADOR |
 | `/salones` | CRUD de salones | ADMIN, COORDINADOR |
-| `/grupos` | CRUD de grupos | ADMIN, COORDINADOR |
+| `/grupos` | CRUD de grupos + asignar materias | ADMIN, COORDINADOR |
 | `/periodos` | CRUD de periodos escolares | ADMIN, COORDINADOR |
 | `/bloques` | CRUD de bloques horarios | ADMIN |
 | `/disponibilidad` | Gestión de disponibilidad por profesor | ADMIN, COORDINADOR |
 | `/usuarios` | CRUD de usuarios | ADMIN |
+| `/horarios` | Generación y visualización de horarios | Todos |
 
 ---
 
@@ -237,6 +286,14 @@ Authorization: Bearer <token>
 | PATCH | `/disponibilidad/:id` | Actualizar disponibilidad | ADMIN |
 | DELETE | `/disponibilidad/:id` | Eliminar disponibilidad | ADMIN |
 
+### Scheduling
+| Método | Ruta | Descripción | Rol |
+|--------|------|-------------|-----|
+| POST | `/scheduling/generar/:periodoId` | Generar horario automático | ADMIN |
+| GET | `/scheduling/horario/:periodoId` | Obtener horario generado | Todos |
+| DELETE | `/scheduling/limpiar/:periodoId` | Eliminar asignaciones propuestas | ADMIN |
+| GET | `/scheduling/diagnosticar/:periodoId` | Diagnóstico de datos del periodo | ADMIN |
+
 ---
 
 ## Roles y permisos
@@ -247,7 +304,8 @@ Authorization: Bearer <token>
 | Crear/editar entidades | ✅ | ❌ | ❌ |
 | Consultar entidades | ✅ | ✅ | ❌ |
 | Gestionar disponibilidad | ✅ | ✅ | ❌ |
-| Ver propio horario | ✅ | ✅ | ✅ |
+| Generar horarios | ✅ | ❌ | ❌ |
+| Ver horarios | ✅ | ✅ | ✅ |
 
 ---
 
@@ -270,6 +328,7 @@ SIGECA-V2/
 │   │   ├── periodos-escolares/
 │   │   ├── grupos/
 │   │   ├── disponibilidad/
+│   │   ├── scheduling/
 │   │   └── app.module.ts
 │   └── package.json
 ├── frontend/
@@ -286,6 +345,7 @@ SIGECA-V2/
 │   │   │   │   ├── periodos/
 │   │   │   │   ├── bloques/
 │   │   │   │   ├── disponibilidad/
+│   │   │   │   ├── horarios/
 │   │   │   │   └── usuarios/
 │   │   │   └── layout.tsx
 │   │   ├── components/
