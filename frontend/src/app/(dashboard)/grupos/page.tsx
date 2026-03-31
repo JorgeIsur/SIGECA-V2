@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/axios';
-import { Grupo, PeriodoEscolar } from '@/lib/types';
+import { Grupo, PeriodoEscolar, Materia } from '@/lib/types';
 import Tabla from '@/components/ui/Tabla';
 import Modal from '@/components/ui/Modal';
 
@@ -18,17 +18,24 @@ export default function GruposPage() {
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
+  const [materias, setMaterias] = useState<Materia[]>([]);
+  const [modalMaterias, setModalMaterias] = useState(false);
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState<Grupo | null>(null);
+  const [materiasAsignadas, setMateriasAsignadas] = useState<number[]>([]);
+
   useEffect(() => { cargarDatos(); }, []);
 
   async function cargarDatos() {
     try {
-      const [{ data: g }, { data: p }] = await Promise.all([
+      const [{ data: g }, { data: p }, { data: m }] = await Promise.all([
         api.get('/grupos'),
         api.get('/periodos-escolares'),
+        api.get('/materias'),
       ]);
       setGrupos(g);
       setPeriodos(p);
-      if (p.length > 0 && formInicial.periodoId === 0) {
+      setMaterias(m);
+      if (p.length > 0) {
         formInicial.periodoId = p[0].id;
       }
     } finally {
@@ -85,11 +92,39 @@ export default function GruposPage() {
     { header: 'Carrera', accessor: 'carrera' as keyof Grupo },
     { header: 'Semestre', accessor: 'semestre' as keyof Grupo },
     { header: 'Cupo', accessor: 'cupo' as keyof Grupo },
+    { header: 'Periodo', accessor: (g: Grupo) => g.periodo?.nombre ?? '—' },
     {
-      header: 'Periodo',
-      accessor: (g: Grupo) => g.periodo?.nombre ?? '—',
+      header: 'Materias',
+      accessor: (g: Grupo) => (
+        <button
+          onClick={() => abrirMaterias(g)}
+          className="text-xs text-purple-600 hover:underline"
+        >
+          Gestionar
+        </button>
+      ),
     },
   ];
+
+  async function abrirMaterias(grupo: Grupo) {
+    setGrupoSeleccionado(grupo);
+    const { data } = await api.get(`/grupos/${grupo.id}`);
+    const ids = data.materias.map((mg: any) => mg.materiaId);
+    setMateriasAsignadas(ids);
+    setModalMaterias(true);
+  }
+
+  async function toggleMateria(materiaId: number) {
+    if (!grupoSeleccionado) return;
+    const asignada = materiasAsignadas.includes(materiaId);
+    if (asignada) {
+      await api.delete(`/grupos/${grupoSeleccionado.id}/materias/${materiaId}`);
+      setMateriasAsignadas(materiasAsignadas.filter((id) => id !== materiaId));
+    } else {
+      await api.post(`/grupos/${grupoSeleccionado.id}/materias/${materiaId}`);
+      setMateriasAsignadas([...materiasAsignadas, materiaId]);
+    }
+  }
 
   return (
     <div>
@@ -161,6 +196,43 @@ export default function GruposPage() {
                 {guardando ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+      {modalMaterias && grupoSeleccionado && (
+        <Modal
+          titulo={`Materias — ${grupoSeleccionado.nombre}`}
+          onCerrar={() => setModalMaterias(false)}
+        >
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {materias.length === 0 ? (
+              <p className="text-sm text-gray-400">No hay materias registradas.</p>
+            ) : (
+              materias.map((materia) => {
+                const asignada = materiasAsignadas.includes(materia.id);
+                return (
+                  <button
+                    key={materia.id}
+                    onClick={() => toggleMateria(materia.id)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${
+                      asignada
+                        ? 'bg-purple-50 border-purple-200 text-purple-800'
+                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {asignada ? '✓ ' : ''}{materia.clave} — {materia.nombre}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <div className="pt-3 flex justify-end">
+            <button
+              onClick={() => setModalMaterias(false)}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+            >
+              Cerrar
+            </button>
           </div>
         </Modal>
       )}

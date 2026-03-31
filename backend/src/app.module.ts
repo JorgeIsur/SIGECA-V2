@@ -11,9 +11,10 @@ import { BloquesHorarioModule } from './bloques-horario/bloques-horario.module';
 import { PeriodosEscolaresModule } from './periodos-escolares/periodos-escolares.module';
 import { GruposModule } from './grupos/grupos.module';
 import { DisponibilidadModule } from './disponibilidad/disponibilidad.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsuariosModule, ProfesoresModule, MateriasModule, SalonesModule, BloquesHorarioModule, PeriodosEscolaresModule, GruposModule, DisponibilidadModule],
+  imports: [PrismaModule, AuthModule, UsuariosModule, ProfesoresModule, MateriasModule, SalonesModule, BloquesHorarioModule, PeriodosEscolaresModule, GruposModule, DisponibilidadModule, SchedulingModule],
   controllers: [AppController],
   providers: [AppService],
 })

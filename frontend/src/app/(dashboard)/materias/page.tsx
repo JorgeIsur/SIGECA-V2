@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/axios';
-import { Materia } from '@/lib/types';
+import { Materia, Profesor } from '@/lib/types';
 import Tabla from '@/components/ui/Tabla';
 import Modal from '@/components/ui/Modal';
 
@@ -24,12 +24,21 @@ export default function MateriasPage() {
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
+  const [profesores, setProfesores] = useState<Profesor[]>([]);
+  const [modalProfesores, setModalProfesores] = useState(false);
+  const [materiaSeleccionada, setMateriaSeleccionada] = useState<Materia | null>(null);
+  const [profesoresAsignados, setProfesoresAsignados] = useState<number[]>([]);
+
   useEffect(() => { cargarMaterias(); }, []);
 
   async function cargarMaterias() {
     try {
-      const { data } = await api.get('/materias');
-      setMaterias(data);
+      const [{ data: m }, { data: p }] = await Promise.all([
+        api.get('/materias'),
+        api.get('/profesores'),
+      ]);
+      setMaterias(m);
+      setProfesores(p);
     } finally {
       setCargando(false);
     }
@@ -87,7 +96,38 @@ export default function MateriasPage() {
     { header: 'Semestre', accessor: 'semestre' as keyof Materia },
     { header: 'Horas', accessor: 'horasSemanales' as keyof Materia },
     { header: 'Créditos', accessor: 'creditos' as keyof Materia },
+    {
+      header: 'Profesores',
+      accessor: (m: Materia) => (
+        <button
+          onClick={() => abrirProfesores(m)}
+          className="text-xs text-purple-600 hover:underline"
+        >
+          Gestionar
+        </button>
+      ),
+    },
   ];
+
+  async function abrirProfesores(materia: Materia) {
+    setMateriaSeleccionada(materia);
+    const { data } = await api.get(`/materias/${materia.id}`);
+    const ids = data.profesores.map((mp: any) => mp.profesorId);
+    setProfesoresAsignados(ids);
+    setModalProfesores(true);
+  }
+
+  async function toggleProfesor(profesorId: number) {
+    if (!materiaSeleccionada) return;
+    const asignado = profesoresAsignados.includes(profesorId);
+    if (asignado) {
+      await api.delete(`/materias/${materiaSeleccionada.id}/profesores/${profesorId}`);
+      setProfesoresAsignados(profesoresAsignados.filter((id) => id !== profesorId));
+    } else {
+      await api.post(`/materias/${materiaSeleccionada.id}/profesores/${profesorId}`);
+      setProfesoresAsignados([...profesoresAsignados, profesorId]);
+    }
+  }
 
   return (
     <div>
@@ -151,6 +191,43 @@ export default function MateriasPage() {
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {guardando ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {modalProfesores && materiaSeleccionada && (
+        <Modal
+          titulo={`Profesores — ${materiaSeleccionada.nombre}`}
+          onCerrar={() => setModalProfesores(false)}
+        >
+          <div className="space-y-2">
+            {profesores.length === 0 ? (
+              <p className="text-sm text-gray-400">No hay profesores registrados.</p>
+            ) : (
+              profesores.map((profesor) => {
+                const asignado = profesoresAsignados.includes(profesor.id);
+                return (
+                  <button
+                    key={profesor.id}
+                    onClick={() => toggleProfesor(profesor.id)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${
+                      asignado
+                        ? 'bg-purple-50 border-purple-200 text-purple-800'
+                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {asignado ? '✓ ' : ''}{profesor.nombre}
+                  </button>
+                );
+              })
+            )}
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setModalProfesores(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+              >
+                Cerrar
               </button>
             </div>
           </div>

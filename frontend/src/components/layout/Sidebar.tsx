@@ -14,6 +14,7 @@ const navItems = [
   { href: '/bloques', label: 'Bloques horarios', roles: ['ADMIN'] },
   { href: '/disponibilidad', label: 'Disponibilidad', roles: ['ADMIN', 'COORDINADOR'] },
   { href: '/usuarios', label: 'Usuarios', roles: ['ADMIN'] },
+  { href: '/horarios', label: 'Horarios', roles: ['ADMIN', 'COORDINADOR', 'PROFESOR'] },
 ];
 
 export default function Sidebar() {
